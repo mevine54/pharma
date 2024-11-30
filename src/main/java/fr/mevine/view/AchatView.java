@@ -3,17 +3,32 @@ package fr.mevine.view;
 import fr.mevine.controller.AchatController;
 import fr.mevine.controller.ClientController;
 import fr.mevine.controller.MedecinController;
+import fr.mevine.model.Client;
+import fr.mevine.model.Medecin;
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ItemEvent;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.List;
 
 public class AchatView extends JPanel {
     private AchatController achatController;
     private MainDashboardView mainDashboardView;
+    private Map<String, Double> prixMedicaments;
 
     public AchatView(ClientController clientController, MedecinController medecinController, AchatController achatController, MainDashboardView mainDashboardView) {
         this.achatController = achatController;
         this.mainDashboardView = mainDashboardView;
+        this.prixMedicaments = new HashMap<>();
+        initPrixMedicaments();
         initComponents(clientController, medecinController);
+    }
+
+    private void initPrixMedicaments() {
+        prixMedicaments.put("Paracétamol", 5.00);
+        prixMedicaments.put("Ibuprofène", 7.50);
+        prixMedicaments.put("Aspirine", 6.00);
     }
 
     private void initComponents(ClientController clientController, MedecinController medecinController) {
@@ -48,7 +63,7 @@ public class AchatView extends JPanel {
         gbc.gridy = 1;
         panelFormulaire.add(labelMedicament, gbc);
 
-        JComboBox<String> medicamentCombo = new JComboBox<>(new String[]{"Paracétamol", "Ibuprofène", "Aspirine"});
+        JComboBox<String> medicamentCombo = new JComboBox<>(prixMedicaments.keySet().toArray(new String[0]));
         gbc.gridx = 1;
         gbc.gridy = 1;
         panelFormulaire.add(medicamentCombo, gbc);
@@ -59,7 +74,7 @@ public class AchatView extends JPanel {
         gbc.gridy = 2;
         panelFormulaire.add(labelPrixUnitaire, gbc);
 
-        JTextField prixUnitaireField = new JTextField("5.00");
+        JTextField prixUnitaireField = new JTextField();
         prixUnitaireField.setEditable(false);
         gbc.gridx = 1;
         gbc.gridy = 2;
@@ -82,7 +97,7 @@ public class AchatView extends JPanel {
         gbc.gridy = 4;
         panelFormulaire.add(labelPrixTotal, gbc);
 
-        JTextField prixTotalField = new JTextField("5.00");
+        JTextField prixTotalField = new JTextField();
         prixTotalField.setEditable(false);
         gbc.gridx = 1;
         gbc.gridy = 4;
@@ -106,6 +121,25 @@ public class AchatView extends JPanel {
         gbc.gridy = 6;
         panelFormulaire.add(new JScrollPane(medicamentsAjoutesArea), gbc);
 
+        // Labels et ComboBox pour sélectionner un médecin et un client (affichés uniquement pour l'achat via ordonnance)
+        JLabel labelMedecin = new JLabel("Sélectionner un médecin traitant:");
+        gbc.gridx = 0;
+        gbc.gridy = 7;
+        panelFormulaire.add(labelMedecin, gbc);
+        JComboBox<String> medecinCombo = new JComboBox<>(medecinController.listerMedecins().stream().map(m -> m.getNom() + " " + m.getPrenom()).toArray(String[]::new));
+        gbc.gridx = 1;
+        gbc.gridy = 7;
+        panelFormulaire.add(medecinCombo, gbc);
+
+        JLabel labelClient = new JLabel("Sélectionner un client:");
+        gbc.gridx = 0;
+        gbc.gridy = 8;
+        panelFormulaire.add(labelClient, gbc);
+        JComboBox<String> clientCombo = new JComboBox<>(clientController.listerClients().stream().map(c -> c.getNom() + " " + c.getPrenom()).toArray(String[]::new));
+        gbc.gridx = 1;
+        gbc.gridy = 8;
+        panelFormulaire.add(clientCombo, gbc);
+
         // Ajout du formulaire au centre
         add(panelFormulaire, BorderLayout.CENTER);
 
@@ -118,15 +152,44 @@ public class AchatView extends JPanel {
         panelBoutons.add(btnRetour);
         add(panelBoutons, BorderLayout.SOUTH);
 
-        // Actions des boutons
+        // Actions des boutons et événements
         btnRetour.addActionListener(e -> mainDashboardView.afficherVue("Accueil"));
+
         btnValiderAchat.addActionListener(e -> {
             // Logique de validation de l'achat
             String medicament = (String) medicamentCombo.getSelectedItem();
             String quantiteStr = quantiteField.getText();
             try {
                 int quantite = Integer.parseInt(quantiteStr);
-                double prixUnitaire = Double.parseDouble(prixUnitaireField.getText());
+                double prixUnitaire = prixMedicaments.get(medicament);
+                double prixTotal = quantite * prixUnitaire;
+                prixTotalField.setText(String.valueOf(prixTotal));
+
+                // Ajouter le médicament à la liste des médicaments ajoutés
+                medicamentsAjoutesArea.append(medicament + " - Quantité: " + quantite + " - Prix Total: " + prixTotal + "\n");
+
+                // Enregistrer l'achat via le contrôleur (à implémenter selon votre logique)
+                if (typeAchatCombo.getSelectedItem().equals("Achat via ordonnance")) {
+                    String medecinNom = (String) medecinCombo.getSelectedItem();
+                    String clientNom = (String) clientCombo.getSelectedItem();
+                    Medecin medecin = medecinController.getMedecinByName(medecinNom);
+                    Client client = clientController.getClientByName(clientNom);
+                    achatController.ajouterAchatAvecOrdonnance(medicament, quantiteStr, client, medecin);
+                } else {
+                    achatController.ajouterAchat(medicament, quantiteStr);
+                }
+                JOptionPane.showMessageDialog(this, "Achat validé et enregistré !", "Succès", JOptionPane.INFORMATION_MESSAGE);
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(this, "Veuillez entrer une quantité valide.", "Erreur", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        btnAjouterMedicament.addActionListener(e -> {
+            // Mettre à jour le prix total dès qu'on ajoute un médicament
+            try {
+                String medicament = (String) medicamentCombo.getSelectedItem();
+                int quantite = Integer.parseInt(quantiteField.getText());
+                double prixUnitaire = prixMedicaments.get(medicament);
                 double prixTotal = quantite * prixUnitaire;
                 prixTotalField.setText(String.valueOf(prixTotal));
 
@@ -134,6 +197,27 @@ public class AchatView extends JPanel {
                 medicamentsAjoutesArea.append(medicament + " - Quantité: " + quantite + "\n");
             } catch (NumberFormatException ex) {
                 JOptionPane.showMessageDialog(this, "Veuillez entrer une quantité valide.", "Erreur", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        // Mettre à jour le prix unitaire lorsqu'un médicament est sélectionné
+        medicamentCombo.addItemListener(e -> {
+            if (e.getStateChange() == ItemEvent.SELECTED) {
+                String medicament = (String) e.getItem();
+                prixUnitaireField.setText(String.valueOf(prixMedicaments.get(medicament)));
+            }
+        });
+
+        // Changer le titre en fonction du type d'achat sélectionné et afficher/masquer les options
+        typeAchatCombo.addItemListener(e -> {
+            if (e.getStateChange() == ItemEvent.SELECTED) {
+                String typeAchat = (String) e.getItem();
+                labelTitre.setText(typeAchat + " sélectionné");
+                boolean isOrdonnance = typeAchat.equals("Achat via ordonnance");
+                labelMedecin.setVisible(isOrdonnance);
+                medecinCombo.setVisible(isOrdonnance);
+                labelClient.setVisible(isOrdonnance);
+                clientCombo.setVisible(isOrdonnance);
             }
         });
     }
